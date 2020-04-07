@@ -17,14 +17,15 @@ class Database{
 		  });
 
 		this.employeeSchema=new mongoose.Schema({
-			_id:String,	//_id is email
+			_id:String,	//_id is email, and must be unique or error will be thrown
 			pwHash:String,
 			role:{ type: String, default: 'Employee' } //can be Employee or Admin
 		});
 
 		/**
-		 * has start, finish, total time, and notes for easy access
+		 * Has start time, finish time, total time, and notes for easy access of work information
 		 * email is used for identification
+		 * _id is auto-generated
 		 */
 		this.documentSchema=new mongoose.Schema({
 			startTime:Date,
@@ -43,7 +44,6 @@ class Database{
 	 */
 	async addEmployee(email, pwHash, role){
 		var Employee=this.employee.model(role,this.employeeSchema);
-		var result=true;
 		try{
 			var newEmployee=Employee({_id:email,pwHash:pwHash});
 			await newEmployee.save()

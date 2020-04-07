@@ -3,12 +3,11 @@ const app = express();
 const jwt = require('jsonwebtoken');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
-const Database=require('./Database');
+const Database=require('./database');
+
+
 app.use(bodyParser.json());
 const accessTokenSecret='j9D9s93aMNUt2d8PKWTGbbYJ';
-const refreshTokenSecret = 'uE52krSnZ68ugDvax2XySDG4';
-const refreshTokens = [];
-
 const db=new Database.Database();
 
 /**
@@ -56,8 +55,9 @@ const authenticateAdminJWT = (req, res, next) => {
 };
 /**
  * Specifies time period, and retieves all documents that reference time between these two times
- * @param {Date} start - start time
- * @param {Date} end - end time
+ * @param {Date} body.startTime - start time
+ * @param {Date} body.endTime - end time
+ * @requires admin 
  * @returns List of Documents that meet the time requirements
  */
 app.get('/get-times',authenticateAdminJWT,(req,res)=>{
@@ -94,15 +94,17 @@ app.get('/document',authenticateJWT,(req,res)=>{
 
 /**
  * Creates a Document that is stored in the database representing time worked by an employee. Start time is calculated from totalTime and finishTime
- * @param {Date} finishTime - time work is finished
- * @param {Number} totalTime - time in seconds worked
- * @param {String} notes - notes to add to document
+ * @param {Date} body.finishTime - time work is finished
+ * @param {Number} body.totalTime - time in seconds worked
+ * @param {String} body.notes - notes to add to document
  * @returns 201 response on success with document ID that can be used to retreive, update, or delete this document
  */
 app.post('/document',authenticateJWT,(req,res)=>{
 	var newDoc={user:req.user.username};
 	if ("finishTime" in req.body){
 		newDoc["finishTime"]=Date.parse(req.body.finishTime);
+		
+		//if both finish time and total time are included, we can calculate start time
 		if ("totalTime" in req.body){
 			newDoc["totalTime"]=req.body.totalTime;
 			newDoc["startTime"]=new Date(newDoc["finishTime"]-1000*newDoc["totalTime"]);
@@ -117,16 +119,17 @@ app.post('/document',authenticateJWT,(req,res)=>{
 	res.status(201).send(db.createDoc(newDoc))
 	
 })
+
 /**
  * Finds existing document through document ID. Information in the document is replaced by any provided data
  * @param {String} id - Id of document to modify
- * @param {Date} finishTime - time work is finished
- * @param {Number} totalTime - time in seconds worked
- * @param {String} notes - notes to add to document
+ * @param {Date} body.finishTime - time work is finished
+ * @param {Number} body.totalTime - time in seconds worked
+ * @param {String} body.notes - notes to add to document
  */
 app.post('/document/:id',authenticateJWT,(req,res)=>{
 	var id=req.params.id;
-	data=req.body
+	var data=req.body
 	db.updateDoc(id,data)
 	.then(result=>{
 		if(result){
@@ -141,7 +144,7 @@ app.post('/document/:id',authenticateJWT,(req,res)=>{
 /**
  * Adds information to a document's note without deleting the existing information.
  * @param {String} id - ID of document to edit
- * @param {String} note - Information to concat to existing note in document
+ * @param {String} body.note - Information to concat to existing note in document
  * @returns ID of document edited
  */
 app.post('/add-note/:id',authenticateJWT,(req,res)=>{
@@ -189,15 +192,16 @@ app.get('/document/:id',authenticateJWT,(req,res)=>{
 		else{
 			res.sendStatus(404);
 		}
-	}
-	).catch(e=>{
+	})
+	.catch(e=>{
 		res.sendStatus(404)
 	})
 });
 
 /**
  * Finds all Documents where the search term is found in the notes. Case insensitive.
- * @param {String} term - Term to search for
+ * @param {String} body.term - Term to search for
+ * @requires admin 
  * @returns list of documents that contain the term specified
  */
 app.get('/search',authenticateAdminJWT,(req,res)=>{
@@ -232,7 +236,6 @@ app.get('/employee/:id',(req,res)=>{
 	.catch(e=>{
 		res.send(e)
 	});
-	//employee.then(()=>)
 })
 
 /**
@@ -253,29 +256,14 @@ app.get('/employee',authenticateAdminJWT,(req,res)=>{
 		res.sendStatus(404)
 	});
 })
-/*
-app.post('/token',(req,res)=>{
-	const { token } = req.body;
 
-    if (!token) {
-        return res.sendStatus(401);
-    }
 
-    if (!refreshTokens.includes(token)) {
-        return res.sendStatus(403);
-    }
-
-    jwt.verify(token, refreshTokenSecret, (err, user) => {
-        if (err) {
-			 return res.sendStatus(403);
-        }
-        const accessToken = jwt.sign({ username: user.email, role: user.role }, accessTokenSecret, { algorithm:'HS256',expiresIn: '24h' });
-		res.json({
-            accessToken
-        });
-    });
-});
-*/
+/**
+ * Checks to make sure credentials given match up with an existing user
+ * @param {String} email - email supplied by user
+ * @param {String} passowrd - password supplied by user. Only hash is kept
+ * @returns access token if successful, 403 error if not
+ */
 app.post('/login', (req, res) => {
 	// Read username and password from request body
 	const { email, password } = req.body;
@@ -285,12 +273,9 @@ app.post('/login', (req, res) => {
 		.then(user=>{
 		    if (user) {
 				// Generate an access token
-				const accessToken = jwt.sign({ username: user._id,  role: user.role }, accessTokenSecret,{expiresIn: '24h'});/*
-				const refreshToken = jwt.sign({ email: user.email,  role: user.accountType }, refreshTokenSecret);
-				refreshTokens.push(refreshToken);*/
+				const accessToken = jwt.sign({ username: user._id,  role: user.role }, accessTokenSecret,{expiresIn: '24h'});
 		        res.json({
-					accessToken/*,
-					refreshToken*/
+					accessToken
 		        });
 			} 
 			else {
